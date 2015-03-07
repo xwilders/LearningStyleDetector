@@ -3,15 +3,15 @@ from scipy import io
 from random import random
 import math
 import h5py
-from simulator import Game, BLOCK_TIME, TIME_INCREMENT, BLOCKS_PER_LEVEL, LEVELS
-from learners import ActiveLearner, ReflectiveLearner
+from simulatorKurt import Game, LEVELS
+from learnersKurt import ActiveLearner, ReflectiveLearner
 
-width = BLOCK_TIME * BLOCKS_PER_LEVEL * (1/TIME_INCREMENT)
-height = LEVELS
 channels = 1
-images = 10000
+images = 1000
 
-game = Game(width, height, channels)
+game = Game(channels)
+width = game.levelLength
+height = LEVELS
 classes = [ActiveLearner(), ReflectiveLearner()]
 
 #make data
@@ -29,6 +29,8 @@ def drawByClass(imageNum, arr):
 
 for image in range(images):
 	y[image] = drawByClass(image, x[image])
+	if image>0 and image%(images/10) == 0 and images >= 1000:
+		print(image, "images generated")
 
 
 f = h5py.File("gameData.hdf5", "w")
@@ -38,8 +40,8 @@ xData[...] = x
 yData = group.create_dataset("y", (images,), dtype='i')
 yData[...] = y
 
-print(xData[0:3])
-print(yData[0:3])
+#print(xData[0:3])
+#print(yData[0:3])
 
 f.close()
 
