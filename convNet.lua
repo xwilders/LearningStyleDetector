@@ -19,40 +19,73 @@ local expand = function(label)
 	elem = elem + 1
 end
 yRaw:apply(expand)]]--
-
-local width = 40
-local height = 6
-local channels = 1
+local width = x:size(4)
+local height = x:size(3)
+local channels = x:size(2)
+local dataSize = x:size(1)
 
 for c = 1, channels do
 	d = x[{{}, {c}, {}}]
-	x[{{}, {c}, {}}] = d/d:max()
+	--Scaling and mean substraction
+	var = d:max()/2
+	x[{{}, {c}, {}}] = (d - var)/var
 end
---print(x[1])
 
 local classes = y:max()
 
-local dataSize = x:size(1)
 
 local trainSize = math.ceil(dataSize*0.9)
 trainX = x[{{1, trainSize}, {}}]
 trainY = y[{{1, trainSize}}]
 
+
 local testSize = dataSize - trainSize
 testX = x[{{trainSize, dataSize}, {}}]
 testY = y[{{trainSize, dataSize}}]
-print(x:size())
 
+outCh = 1
 local convNet = nn.Sequential()
-convNet:add(nn.SpatialConvolution(channels, 6, 6, 3))
+
+--convNet:add(nn.SpatialConvolution(channels, outCh, 3, 6))
+
+--[[
 convNet:add(nn.ReLU())
-convNet:add(nn.SpatialMaxPooling(2, 2, 2, 2))
-convNet:add(nn.SpatialConvolution(6, 12, 6, 2))
+convNet:add(nn.SpatialConvolution(outCh, outCh, 3, 1))
 convNet:add(nn.ReLU())
-convNet:add(nn.SpatialConvolution(12, 24, 6, 1))
+convNet:add(nn.SpatialMaxPooling(2, 1, 2, 2))
+
+convNet:add(nn.SpatialConvolution(outCh, outCh*2, 3, 1))
 convNet:add(nn.ReLU())
-convNet:add(nn.Reshape(24*7))
-convNet:add(nn.Linear(24*7, classes))
+convNet:add(nn.SpatialConvolution(outCh*2, outCh*2, 3, 1))
+convNet:add(nn.ReLU())
+convNet:add(nn.SpatialMaxPooling(2, 1, 2, 1))
+
+convNet:add(nn.SpatialConvolution(outCh*2, outCh*4, 3, 1))
+convNet:add(nn.ReLU())
+convNet:add(nn.SpatialConvolution(outCh*4, outCh*4, 3, 1))
+convNet:add(nn.ReLU())
+convNet:add(nn.SpatialMaxPooling(2, 1, 2, 1))
+
+convNet:add(nn.SpatialConvolution(outCh*4, outCh*8, 3, 1))
+convNet:add(nn.ReLU())
+convNet:add(nn.SpatialConvolution(outCh*8, outCh*8, 3, 1))
+convNet:add(nn.ReLU())
+convNet:add(nn.SpatialMaxPooling(2, 1, 2, 1))
+
+convNet:add(nn.SpatialConvolution(outCh*8, outCh*8, 3, 1))
+convNet:add(nn.ReLU())
+convNet:add(nn.SpatialMaxPooling(2, 1, 2, 1))
+convNet:add(nn.SpatialConvolution(outCh*8, outCh*8, 1, 1))
+]]--
+
+
+convNet:add(nn.Reshape(outCh*144*6))
+--[[convNet:add(nn.Dropout())
+convNet:add(nn.Linear(outCh*8, 128))
+convNet:add(nn.ReLU())
+convNet:add(nn.Dropout())
+--]]
+convNet:add(nn.Linear(outCh*144*6, classes))
 convNet:add(nn.LogSoftMax())
 
 local criterion = nn.ClassNLLCriterion()
@@ -63,9 +96,8 @@ local criterion = nn.ClassNLLCriterion()
 --local image = image.display(input)
 
 
---BATCHES COMING NEXT!
 local counter = 0
-local batchSize = 32
+local batchSize = 256
 local epochs = 3
 local iterations = epochs * math.ceil(trainSize / batchSize)
 

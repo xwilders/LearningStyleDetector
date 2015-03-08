@@ -74,7 +74,7 @@ class Game():
 
 		enemies.add(self.spawnEnemy(time))
 
-		action, accuracy = learner.getAction(spawn, visible, danger, enemies[0].num)
+		action, accuracy = learner.getAction(spawn, visible, danger)
 		self.doAction(action, accuracy, enemies)
 
 		while len(enemies)>0 and enemies[0].isDead():
@@ -85,7 +85,7 @@ class Game():
 	def doAction(self, action, accuracy, enemies):
 		if len(enemies) > 0:
 			if action == Learner.SWIPE:
-				if random()*100 < accuracy:
+				if random()*100 < accuracy[enemies[0].num]:
 					enemies[0].die()
 			elif action == Learner.DEFEND:
 				for enemy in enemies:

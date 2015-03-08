@@ -5,6 +5,7 @@ import math
 import h5py
 from simulatorKurt import Game, LEVELS
 from learnersKurt import ActiveLearner, ReflectiveLearner
+import time
 
 channels = 1
 images = 1000
@@ -13,6 +14,7 @@ game = Game(channels)
 width = game.levelLength
 height = LEVELS
 classes = [ActiveLearner(), ReflectiveLearner()]
+start = time.time()
 
 #make data
 
@@ -50,6 +52,7 @@ f = h5py.File("gameData.hdf5", "r")
 
 print(f["/data/x"])
 print(f["/data/y"])
+print(time.time()-start, "s")
 
 f.close()
 

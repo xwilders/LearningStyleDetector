@@ -8,7 +8,7 @@ class Learner:
 	BEACON = 2
 	DEFEND = 3
 
-	def getAction(self, spawn, visible, danger, enemyType):
+	def getAction(self, spawn, visible, danger):
 		action = (self.WAIT, 100)
 		ran = random()*100
 		situation = self.CLEAR
@@ -24,7 +24,7 @@ class Learner:
 			situation = self.VISIBLE_1
 
 		if ran < situation[self.SWIPE]:
-			action = (self.SWIPE, self.SWIPE_ACC[enemyType])
+			action = (self.SWIPE, self.SWIPE_ACC)
 		elif ran < situation[self.BEACON] + situation[self.SWIPE]:
 			action = (self.BEACON, 100)
 		elif ran < situation[self.DEFEND] + situation[self.BEACON] + situation[self.SWIPE]:
