@@ -4,13 +4,13 @@ from random import random
 import math
 import h5py
 from simulatorKurtEfficient import Game, LEVELS
-from learnersKurt import ActiveLearner, ReflectiveLearner
+from learnersKurt import activeLearner, reflectiveLearner
 import time
 
 channels = 1
-images = 10000
+images = 100
 
-classes = [ActiveLearner(), ReflectiveLearner()]
+classes = [activeLearner, reflectiveLearner]
 game = Game(images, channels, classes)
 width = game.levelLength
 height = LEVELS
@@ -28,8 +28,9 @@ xData[...] = x
 yData = group.create_dataset("y", (images,), dtype='i')
 yData[...] = y
 
-#print(xData[0:3])
-#print(yData[0:3])
+if images<=100:
+	print(xData[0:3][0])
+	print(yData[0])
 
 f.close()
 

@@ -8,7 +8,7 @@ WAVES_PER_LEVEL = 6
 TIME_INCREMENT = 0.5
 LEVELS = 6
 
-ENEMY_D = (1, 1)
+ENEMY_D = (0, 1)
 
 class Enemy():
 	def __init__(self, enemy):

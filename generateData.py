@@ -8,7 +8,7 @@ from learnersKurt import ActiveLearner, ReflectiveLearner
 import time
 
 channels = 1
-images = 1000
+images = 100
 
 game = Game(channels)
 width = game.levelLength

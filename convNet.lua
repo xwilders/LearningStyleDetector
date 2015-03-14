@@ -79,13 +79,13 @@ convNet:add(nn.SpatialConvolution(outCh*8, outCh*8, 1, 1))
 ]]--
 
 
-convNet:add(nn.Reshape(outCh*144*6))
+convNet:add(nn.Reshape(outCh*150*6))
 --[[convNet:add(nn.Dropout())
 convNet:add(nn.Linear(outCh*8, 128))
 convNet:add(nn.ReLU())
 convNet:add(nn.Dropout())
 --]]
-convNet:add(nn.Linear(outCh*144*6, classes))
+convNet:add(nn.Linear(outCh*150*6, classes))
 convNet:add(nn.LogSoftMax())
 
 local criterion = nn.ClassNLLCriterion()
