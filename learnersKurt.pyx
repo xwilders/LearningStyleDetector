@@ -1,8 +1,12 @@
-from random import random, gauss
+from random import gauss
 import math
+
+cdef extern from "stdlib.h":
+		int rand "rand"()
 
 class Learner:
 	
+	NONE = -1
 	WAIT = 0
 	SWIPE = 1
 	BEACON = 2
@@ -12,38 +16,41 @@ class Learner:
 	DEFEND_COOLDOWN = 2
 	BEACON_TIME = 3
 
-	def __init__(self, dicts):
-		self.dicts = dicts		
+	def __init__(self, learner):
+		cdef int i
+		self.LS = {}
+		for key in activeLearner.keys():
+			result = [0,0,0,0]
+			for i in range(len(result)):
+				result[i] = activeLearner[key][i] * learner[0] + reflectiveLearner[key][i] * learner[1]
+			self.LS[key] = result
 
-	def getSit(self, situation, learner):
-		result = [0,0,0,0]
-		for i in range(len(result)):
-			result[i] += reflectiveLearner[situation][i] * learner[0] + activeLearner[situation][i] * learner[1]
-		return result
+	def getAction(self, int spawn, int visible, int danger, defOnCooldown = False):
 
-	def getAction(self, learner, spawn, visible, danger, defOnCooldown = False):
-
-		situation = self.getSit('CLEAR', learner)
+		situation = self.LS['CLEAR']
 		if danger>=2:
-			situation = self.getSit('DANGER_2', learner)
+			situation = self.LS['DANGER_2']
 		elif danger==1:
-			situation = self.getSit('DANGER_1', learner)
+			situation = self.LS['DANGER_1']
 		elif visible>=5:
-			situation = self.getSit('VISIBLE_3', learner)
+			situation = self.LS['VISIBLE_3']
 		elif visible >=3:
-			situation = self.getSit('VISIBLE_2', learner)
+			situation = self.LS['VISIBLE_2']
 		elif visible >=1:
-			situation = self.getSit('VISIBLE_1', learner)
+			situation = self.LS['VISIBLE_1']
 
 		gaussian = list(situation)
 		for i in range(len(gaussian)):
 			gaussian[i] = gauss(situation[i], 20)
-			gaussian[i] = max(0, min(100, gaussian[i]))
+			gaussian[i] = math.floor(max(0, min(100, gaussian[i])))
 
-		total = sum(gaussian)
+		total = math.floor(sum(gaussian))
 		if defOnCooldown:
 			total -= gaussian[self.DEFEND]
-		ran = random()*total
+		if total == 0:
+			return self.WAIT
+
+		ran = rand()%total
 
 		if ran <= gaussian[self.WAIT]:
 			action = self.WAIT
@@ -51,12 +58,13 @@ class Learner:
 			action = self.SWIPE
 		elif ran < gaussian[self.BEACON] + gaussian[self.SWIPE] + gaussian[self.WAIT]:
 			action = self.BEACON
-		elif ran < gaussian[self.DEFEND] + gaussian[self.BEACON] + gaussian[self.SWIPE] + gaussian[self.WAIT]:
+		else:
 			action = self.DEFEND
+
 		return action
 
-	def getAcc(self, learner, situation, num):
-		return reflectiveLearner[situation][num]*learner[0] + activeLearner[situation][num]*learner[1]
+	def getAcc(self, situation, num):
+		return self.LS[situation][num]
 
 
 reflectiveLearner = {

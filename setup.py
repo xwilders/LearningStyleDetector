@@ -2,6 +2,6 @@ from distutils.core import setup
 from Cython.Build import cythonize
 
 setup(
-  name = 'Hello world app',
+  name = 'Simulator',
   ext_modules = cythonize(["simulatorKurtEfficient.pyx", "learnersKurt.pyx"]),
 )

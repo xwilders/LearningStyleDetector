@@ -1,3 +1,7 @@
 ._*
 _*
 LearningStyles.*
+*.c
+*.so
+*.hdf5
+build/
