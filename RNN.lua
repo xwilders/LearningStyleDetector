@@ -1,7 +1,7 @@
 require "nn"
 require "hdf5"
-require "image"
 require "optim"
+require "nnx"
 
 cmd = torch.CmdLine()
 cmd:option("-gpu", false, "Use GPU")
@@ -66,33 +66,22 @@ testX = x[{{trainSize, dataSize}, {}}]
 testY = y[{{trainSize, dataSize}}]
 
 outCh = 2
-local convNet = nn.Sequential()
 
+batchSize = 8
+rho = 5
+hiddenSize = 10
+nIndex = 10000
+-- RNN
+r = nn.Recurrent(
+   hiddenSize, nn.LookupTable(nIndex, hiddenSize), 
+   nn.Linear(hiddenSize, hiddenSize), nn.Sigmoid(), 
+   rho
+)
 
-convNet:add(nn.SpatialZeroPadding(1, 1, 2, 3))
-convNet:add(nn.SpatialConvolution(channels, outCh, 3, 6))
-convNet:add(nn.ReLU())
-convNet:add(nn.SpatialMaxPooling(4, 1, 4, 1))
-
-convNet:add(nn.SpatialZeroPadding(1, 1, 2, 3))
-convNet:add(nn.SpatialConvolution(outCh, outCh*2, 3, 6))
-convNet:add(nn.ReLU())
-convNet:add(nn.SpatialMaxPooling(3, 1, 3, 1))
-
-convNet:add(nn.SpatialZeroPadding(1, 1, 2, 3))
-convNet:add(nn.SpatialConvolution(outCh*2, outCh*4, 3, 6))
-convNet:add(nn.ReLU())
-convNet:add(nn.SpatialMaxPooling(3, 1, 3, 1))
-
-convNet:add(nn.SpatialZeroPadding(1, 1, 2, 3))
-convNet:add(nn.SpatialConvolution(outCh*4, outCh*8, 3, 6))
-convNet:add(nn.ReLU())
-convNet:add(nn.SpatialMaxPooling(3, 1, 3, 1))
-
-convNet:add(nn.SpatialZeroPadding(1, 1, 2, 3))
-convNet:add(nn.SpatialConvolution(outCh*8, outCh*8, 3, 6))
-convNet:add(nn.ReLU())
-convNet:add(nn.SpatialMaxPooling(2, 6, 2, 1))
+rnn = nn.Sequential()
+rnn:add(r)
+rnn:add(nn.Linear(hiddenSize, nIndex))
+rnn:add(nn.LogSoftMax())
 
 
 

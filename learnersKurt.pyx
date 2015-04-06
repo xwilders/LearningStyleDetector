@@ -1,8 +1,8 @@
-from random import gauss
+#from random import gauss
 import math
-
-cdef extern from "stdlib.h":
-		int rand "rand"()
+import numpy as np
+cimport numpy as np
+from libc.stdlib cimport rand
 
 class Learner:
 	
@@ -12,20 +12,19 @@ class Learner:
 	BEACON = 2
 	DEFEND = 3
 
-	DEFEND_TIME = 1
-	DEFEND_COOLDOWN = 2
+	DEFEND_TIME = 1.5
+	DEFEND_COOLDOWN = 3
 	BEACON_TIME = 3
 
 	def __init__(self, learner):
 		cdef int i
 		self.LS = {}
 		for key in activeLearner.keys():
-			result = [0,0,0,0]
-			for i in range(len(result)):
-				result[i] = activeLearner[key][i] * learner[0] + reflectiveLearner[key][i] * learner[1]
-			self.LS[key] = result
+			#Gaussian variance of 10
+			self.LS[key] = activeLearner[key] * learner[0] + reflectiveLearner[key] * learner[1] + 10 * np.random.randn(4)
+			self.LS[key] = self.LS[key]/sum(self.LS[key]) #Normalise
 
-	def getAction(self, int spawn, int visible, int danger, defOnCooldown = False):
+	def getAction(self, int spawn, int visible, int danger, bint defOnCooldown = False):
 
 		situation = self.LS['CLEAR']
 		if danger>=2:
@@ -39,56 +38,50 @@ class Learner:
 		elif visible >=1:
 			situation = self.LS['VISIBLE_1']
 
-		gaussian = list(situation)
-		for i in range(len(gaussian)):
-			gaussian[i] = gauss(situation[i], 20)
-			gaussian[i] = math.floor(max(0, min(100, gaussian[i])))
-
-		total = math.floor(sum(gaussian))
+		cdef int total = 100
 		if defOnCooldown:
-			total -= gaussian[self.DEFEND]
+			total -= situation[self.DEFEND]
 		if total == 0:
 			return self.WAIT
 
-		ran = rand()%total
+		cdef float ran = rand()%total
+		cdef int action
 
-		if ran <= gaussian[self.WAIT]:
+		if ran <= situation[self.WAIT]:
 			action = self.WAIT
-		elif ran < gaussian[self.SWIPE] + gaussian[self.WAIT]:
+		elif ran < situation[self.SWIPE] + situation[self.WAIT]:
 			action = self.SWIPE
-		elif ran < gaussian[self.BEACON] + gaussian[self.SWIPE] + gaussian[self.WAIT]:
+		elif ran < situation[self.BEACON] + situation[self.SWIPE] + situation[self.WAIT]:
 			action = self.BEACON
 		else:
 			action = self.DEFEND
 
 		return action
 
-	def getAcc(self, situation, num):
+	def getAcc(self, situation, int num):
 		return self.LS[situation][num]
 
 
 reflectiveLearner = {
-	'CLEAR' : [10, 0,90,0],
-	'SPAWN' : [5, 0,95,0],
-	'VISIBLE_1' : [0, 20,80,0],
-	'VISIBLE_2' : [0, 25,75,0],
-	'VISIBLE_3' : [0, 50,50,0],
-	'DANGER_1' : [0, 40,40,20],
-	'DANGER_2' : [0, 10,5,85],
-	'SWIPE_ACC' : [30,10,20,25],
-	'BEACON_ACC' : [15,35,25,30],
-	'DEFEND_ACC' : [90,70,60,80]
+	'CLEAR' : np.array([0, 0,0,0]),
+	'SPAWN' : np.array([5, 0,95,0]),
+	'VISIBLE_1' : np.array([15, 5, 80,0]),
+	'VISIBLE_2' : np.array([10, 30, 60,0]),
+	'VISIBLE_3' : np.array([5, 65, 30,0]),
+	'DANGER_1' : np.array([0, 50, 0,50]),
+	'DANGER_2' : np.array([0, 5, 0,95]),
+	'SWIPE_ACC' : np.array([75,25,40,40]),
+	'BEACON_ACC' : np.array([30,50,40,40])
 }
 
 activeLearner = {
-	'CLEAR' : [20, 20,50,10],
-	'SPAWN' : [10, 25,60,5],
-	'VISIBLE_1' : [10, 80,10,0],
-	'VISIBLE_2' : [5, 85,10,0],
-	'VISIBLE_3' : [10, 85,5,0],
-	'DANGER_1' : [0, 80,0,20],
-	'DANGER_2' : [0, 30,0,70],
-	'SWIPE_ACC' : [40,20,30,35],
-	'BEACON_ACC' : [10,30,20,25],
-	'DEFEND_ACC' : [85,60,50,80]
+	'CLEAR' : np.array([0,0,0,0]),
+	'SPAWN' : np.array([5, 5,85,5]),
+	'VISIBLE_1' : np.array([5, 80,15,0]),
+	'VISIBLE_2' : np.array([5, 85,10,0]),
+	'VISIBLE_3' : np.array([0, 100,0,0]),
+	'DANGER_1' : np.array([0, 50,0,50]),
+	'DANGER_2' : np.array([0, 5,0,95]),
+	'SWIPE_ACC' : np.array([100,40,60,60]),
+	'BEACON_ACC' : np.array([25,45,35,35])
 }
