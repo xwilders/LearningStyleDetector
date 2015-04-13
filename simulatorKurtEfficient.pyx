@@ -15,6 +15,9 @@ cdef float WAVE_END_SEC = 26 * TIME_INCR
 STATE_LENGTH = 10
 LEVELS = 6
 
+STORE_IMAGE = 0
+STORE_STATE = 1
+
 cdef int ENEMIES_PER_WAVE = 24
 
 cdef int ENEMY_D = 0
@@ -75,6 +78,7 @@ class Player():
 		self.healthLost = 0
 		self.beacons = 0
 		self.storageType = storageType
+		self.lastAction = 0
 
 	def act(self, int spawn, int visible, int danger, enemies, int totalEnemies, int lvl, int timeInWaveIncr, int timeInLvl, visibleType, dangerType):
 		if timeInWaveIncr == 0:
@@ -84,10 +88,10 @@ class Player():
 			self.beacons = 0
 
 		cdef int enemyNum = totalEnemies - self.passed - self.killedThisWave
-		cdef int actionNum
+		cdef int actionNum = Learner.NONE
 		cdef int i
 
-		if self.killedThisWave < ENEMIES_PER_WAVE: # or timeInWaveIncr < ENEMIES_PER_WAVE + START_WAVE_SEC*INCR_PER_SEC:
+		if self.killedThisWave+self.passed < ENEMIES_PER_WAVE: # or timeInWaveIncr < ENEMIES_PER_WAVE + START_WAVE_SEC*INCR_PER_SEC:
 
 			self.defCooldown -= TIME_INCR
 			actionNum = Learner.WAIT
@@ -119,21 +123,22 @@ class Player():
 							acc = self.learner.getAcc("BEACON_ACC", target.num)
 							if self.notDead(target) and rand()%100 < acc:
 								self.kill(target)
-		else:
-			actionNum = Learner.NONE
 
-		if self.storageType == "IMAGE":
+		if self.storageType == STORE_IMAGE:
 			for channel in range(self.channels):
 				if len(self.x[channel]) <= lvl:
 					self.x[channel].append([])
 				self.x[channel][lvl][timeInLvl] = self.drawState(actionNum+1, channel, enemyNum)
-		elif self.killedThisWave < ENEMIES_PER_WAVE:
+		else:#if self.killedThisWave < ENEMIES_PER_WAVE:
 			#Only store valid game time
-			self.x[self.storageIndex], self.y[self.storageIndex] = self.getState(visibleType, dangerType, actionNum+1)
+			self.x[self.storageIndex] = self.getState(visibleType, dangerType, self.getClosestEnemy(enemies), timeInWaveIncr, timeInLvl)
+			self.y[self.storageIndex] = actionNum + 1 #Crashes Lua if 0
+			self.lastAction = actionNum
 			self.storageIndex += 1
 
 
 	def doAction(self, int actionNum, enemies, int enemyNum):
+		cdef Enemy enemy
 		if actionNum == Learner.SWIPE and enemyNum>0:
 			enemy = self.getClosestEnemy(enemies)
 			if enemy is not None and rand()%100 < self.learner.getAcc("SWIPE_ACC", enemy.num):
@@ -149,10 +154,11 @@ class Player():
 			if self.beaconTime <= 0:
 				self.beaconTime = Learner.BEACON_TIME
 
-	def notDead(self, enemy):
+	def notDead(self, Enemy enemy):
 		return (self, enemy) not in self.deadEnemies or self.deadEnemies[(self, enemy)]>0
 
 	def enemyPassed(self, enemies):
+		cdef Enemy enemy
 		for enemy in enemies:
 			if self.notDead(enemy):
 				self.passed += 1
@@ -160,7 +166,7 @@ class Player():
 				if enemy.boss:
 					self.healthLost += 1
 
-	def kill(self, enemy):
+	def kill(self, Enemy enemy):
 		cdef int life = 0
 		if enemy.boss:
 			life = 2
@@ -172,6 +178,7 @@ class Player():
 			self.killedThisWave += 1
 
 	def getClosestEnemy(self, enemies):
+		cdef Enemy enemy
 		for enemy in enemies:
 			if not enemy.isVisible():
 				return None
@@ -181,19 +188,21 @@ class Player():
 	def getFurthestEnemy(self, enemies):
 		cdef int i
 		cdef int length = len(enemies)
+		cdef Enemy enemy
 		for i in range(length):
 			enemy = enemies[length - i - 1]
 			if self.notDead(enemy) and enemy.isVisible():
 				return enemy
 
 	def getDangerEnemies(self, enemies):
+		cdef Enemy enemy
 		for enemy in enemies:
 			if not enemy.isInDanger():
 					break
 			if self.notDead(enemy):
 				yield enemy
 
-	def drawState(self, int action, int channel, enemyNum):
+	def drawState(self, int action, int channel, int enemyNum):
 		if channel == 0:
 			return action
 		elif channel == 1:
@@ -203,8 +212,13 @@ class Player():
 		elif channel == 3:
 			return self.healthLost
 
-	def getState(self, vT, dT, int action):
-		return np.array([vT[0], vT[1], vT[2], vT[3], dT[0], dT[1], dT[2], dT[3], self.beacons, self.healthLost]), action
+	def getState(self, vT, dT, closestEnemy, timeInWaveIncr, timeInLvl):
+		num = 0
+		distance = 0
+		if closestEnemy is not None:
+			num = closestEnemy.num
+			distance = closestEnemy.distance
+		return np.array([vT[0]+ vT[1]+ vT[2]+ vT[3], dT[0]+dT[1]+dT[2]+dT[3], num, distance, self.lastAction+1, self.defCooldown, self.beacons, timeInWaveIncr, timeInLvl, self.healthLost])
 
 
 		'''
@@ -231,12 +245,12 @@ class Game():
 		self.storageType = storageType
 	
 	def get(self):
-		if self.storageType == "IMAGE":
+		if self.storageType == STORE_IMAGE:
 			x = np.empty(shape=(self.number, self.channels, LEVELS, self.levelLength), dtype='i')
 			y = np.empty(shape=(self.number,self.classes), dtype='f')
 		else:
-			x = np.zeros(shape=(self.number, self.width * self.height, STATE_LENGTH), dtype='i')
-			y = np.zeros(shape=(self.number, self.width * self.height), dtype='i')
+			x = np.empty(shape=(self.number, self.width * self.height, STATE_LENGTH), dtype='i')
+			y = np.empty(shape=(self.number, self.width * self.height), dtype='i')
 
 
 		playerInfo = [0]*self.number
@@ -244,11 +258,14 @@ class Game():
 		cdef int num
 		cdef float active
 
+		active = (rand()%1000)/1000.0
 		for num in range(self.number):
-			active = (rand()%1000)/1000.0
-			learner = Learner([active, 1 - active])
-			if self.storageType == "IMAGE":
-				y[num] = [active, 1 - active]
+			if self.storageType == STORE_IMAGE:
+				active = (rand()%1000)/1000.0 #Different people
+			arr = [active, 1 - active]
+			learner = Learner(arr)
+			if self.storageType == STORE_IMAGE:
+				y[num] = arr
 
 			playerInfo[num] = Player(self.storageType, learner, x[num], y[num], self.channels, self.deadEnemies)
 
@@ -259,7 +276,8 @@ class Game():
 
 		for lvl in range(LEVELS):
 			enemies = []
-			print("Starting level", lvl)
+			if self.storageType == STORE_IMAGE:
+				print("Starting level", lvl)
 			self.totalEnemies = 0
 			timeInLvl = -1
 
@@ -282,6 +300,7 @@ class Game():
 		cdef int spawn = 0
 		cdef int visible = 0
 		cdef int danger = 0
+		cdef Enemy enemy
 
 		visibleType = [0,0,0,0]
 		dangerType = [0,0,0,0]
@@ -312,6 +331,7 @@ class Game():
 
 
 	def spawnEnemy(self, enemies, int timeIncr, int lvl, int wave):
+		cdef Enemy enemy
 		if self.totalEnemies < ENEMIES_PER_WAVE:
 			enemy = self.getNextEnemy(lvl, wave, self.totalEnemies)
 			enemies.append(enemy)
