@@ -12,7 +12,7 @@ cdef float TIME_INCR = 1.0/INCR_PER_SEC
 cdef int START_WAVE_SEC = 0
 cdef float WAVE_END_SEC = 26 * TIME_INCR
 
-STATE_LENGTH = 10
+STATE_LENGTH = 7
 LEVELS = 6
 
 STORE_IMAGE = 0
@@ -93,7 +93,9 @@ class Player():
 
 		if self.killedThisWave+self.passed < ENEMIES_PER_WAVE: # or timeInWaveIncr < ENEMIES_PER_WAVE + START_WAVE_SEC*INCR_PER_SEC:
 
-			self.defCooldown -= TIME_INCR
+			if self.defCooldown>0:
+				self.defCooldown -= TIME_INCR
+			
 			actionNum = Learner.WAIT
 
 			if self.defTime > 0:
@@ -128,10 +130,10 @@ class Player():
 			for channel in range(self.channels):
 				if len(self.x[channel]) <= lvl:
 					self.x[channel].append([])
-				self.x[channel][lvl][timeInLvl] = self.drawState(actionNum+1, channel, enemyNum)
+				self.x[channel][lvl][timeInLvl] = self.drawState(actionNum+1, channel, enemyNum, visible, danger)
 		else:#if self.killedThisWave < ENEMIES_PER_WAVE:
 			#Only store valid game time
-			self.x[self.storageIndex] = self.getState(visibleType, dangerType, self.getClosestEnemy(enemies), timeInWaveIncr, timeInLvl)
+			self.x[self.storageIndex] = self.getState(visible, danger, visibleType, dangerType, self.getClosestEnemy(enemies), timeInWaveIncr, timeInLvl)
 			self.y[self.storageIndex] = actionNum + 1 #Crashes Lua if 0
 			self.lastAction = actionNum
 			self.storageIndex += 1
@@ -202,7 +204,7 @@ class Player():
 			if self.notDead(enemy):
 				yield enemy
 
-	def drawState(self, int action, int channel, int enemyNum):
+	def drawState(self, int action, int channel, int enemyNum, int visible, int danger):
 		if channel == 0:
 			return action
 		elif channel == 1:
@@ -211,14 +213,21 @@ class Player():
 			return self.beacons
 		elif channel == 3:
 			return self.healthLost
+		elif channel == 4:
+			return visible
+		elif channel == 5:
+			return danger
 
-	def getState(self, vT, dT, closestEnemy, timeInWaveIncr, timeInLvl):
+	def getState(self, int visible, int danger, vT, dT, closestEnemy, int timeInWaveIncr, int timeInLvl):
 		num = 0
 		distance = 0
 		if closestEnemy is not None:
 			num = closestEnemy.num
 			distance = closestEnemy.distance
-		return np.array([vT[0]+ vT[1]+ vT[2]+ vT[3], dT[0]+dT[1]+dT[2]+dT[3], num, distance, self.lastAction+1, self.defCooldown, self.beacons, timeInWaveIncr, timeInLvl, self.healthLost])
+		#return np.array([visible>=1, visible>=3, visible>=5, danger==1, danger>=2, vT[0]+ vT[1]+ vT[2]+ vT[3], dT[0]+dT[1]+dT[2]+dT[3], num, distance, self.lastAction+1, self.defCooldown, self.beacons, timeInWaveIncr, timeInLvl, self.healthLost])
+
+		#THIS IS CHEATING!!!
+		return np.array([visible>=1, visible>=3, visible>=5, danger==1, danger>=2, self.lastAction+1, self.defCooldown])
 
 
 		'''
@@ -270,7 +279,7 @@ class Game():
 			playerInfo[num] = Player(self.storageType, learner, x[num], y[num], self.channels, self.deadEnemies)
 
 		self.simulate(playerInfo, x)
-		return x, y
+		return x, y, active
 
 	def simulate(self, playerInfo, image):
 

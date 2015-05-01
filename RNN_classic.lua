@@ -8,7 +8,7 @@ torch.include('rnn', 'SequencerCriterion.lua')
 
 cmd = torch.CmdLine()
 cmd:option("-gpu", false, "Use GPU")
-cmd:option("-dataFile", "gameData1*100000.hdf5", "Path to file")
+cmd:option("-dataFile", "gameData1.hdf5", "Path to file")
 cmd:text()
 opt = cmd:parse(arg or {})
 
@@ -23,8 +23,8 @@ end
 local startTime = os.time()
 
 local f = hdf5.open(opt.dataFile, 'r')
-local x = f:read('/data/x'):all():float()
-local y = f:read('/data/y'):all():float()
+local x = f:read('/data/x'):all():float() -- ALL?
+local y = f:read('/data/y'):all():float() -- ALL ?
 local players = f:read('/data/players'):all():float()
 f:close()
 
@@ -33,52 +33,60 @@ if WITH_CUDA then
   y = y:cuda()
 end
 
+local totalPlayers = 1--players:size(1))
+
 local allParams = nil
 local originalParameters = nil
 
 local dataSize = x:size(1)/players:size(1)
 local states = x:size(3)
-local classes = 4
+local classes = 5
 
 local trainNum = dataSize-1
 local testNum = 1
 local trainSize = trainNum * x:size(2)
 local testSize = testNum * x:size(2)
 
+for s = 1, states do
+  t = x[{{}, {}, {s}}]:max()
+  --Scaling and mean substraction
+  x[{{}, {}, {s}}] = x[{{}, {}, {s}}]/t
+end
+--print(x[1])
+
 local rho = 5
 local updateInterval = 5
-local lr = 0.1
+local lr = 0.1--1--0.000000000000000000000001
 
 -- RNN
-
-local lin = nn.Linear(states, classes)
 local rec = nn.Recurrent(
    states, nn.Identity(), 
-   nn.Linear(states, states), nn.Tanh(), 
-   rho
-)
-local convNet = nn.Sequencer(rec)
+   nn.Linear(states, states), nn.ReLU(), 
+   rho)
 
---local convNet = nn.Sequential()
---convNet:add(nn.Sequencer(rec))
---convNet:add(rec)
+local convNet = nn.Sequential()
+--convNet:add(nn.Linear(states, states))
+--convNet:add(nn.ReLU())
+convNet:add(rec)
+--convNet:add(nn.Tanh())
+convNet:add(nn.Linear(states, states))
+convNet:add(nn.ReLU())
 --local lin = nn.Linear(states, classes)
---convNet:add(lin)
+convNet:add(nn.Linear(states, classes))
 convNet:add(nn.LogSoftMax())
 
-
 local criterion = nn.ClassNLLCriterion()
-local sequencerCriterion = nn.SequencerCriterion(criterion)
+--local sequencerCriterion = nn.SequencerCriterion(criterion)
 
 
 local counter = 0
-local batchSize = 5
-local epochs = 1
+local batchSize = 300
+local epochs = 20
 local gpuNum = 1
 local iterations = epochs * math.ceil(trainSize / batchSize)
 
 local optimState = {
-  learningRate = 1e-1
+  learningRate = 5e-2
 }
 local optimMethod = optim.adagrad
 
@@ -92,12 +100,7 @@ end
 local printErrorPerPercentile = function(player, startTime, trainX, trainY, testX, testY)
 
   local calcError = function(data, labels, p)
-    data = {[1]=data[1], [2]=data[2], [3]=data[3], [4]=data[4], [5]=data[5]}
-    local dataResultsTable = convNet:forward(data)
-    local dataResults = torch.Tensor(batchSize, states)
-    for c = 1, batchSize do
-      dataResults[c] = dataResultsTable[c]
-    end
+    local dataResults = convNet:forward(data)
     local _, maxResults = torch.max(dataResults, 2)
 
     local getPercentileScore = function(val)
@@ -109,32 +112,51 @@ local printErrorPerPercentile = function(player, startTime, trainX, trainY, test
       return
     end
     local results = maxResults:long() - labels:long()
-    --print(maxResults[1][1])
+    --print(maxResults)
     results:apply(getPercentileScore)
   end
 
   local printError = function(data, labels, intro)
-    rec:forget()
-    local p = torch.Tensor(2)
-    for x = 1, data:size(1)/batchSize do
-      local startIndex = (x-1) * batchSize + 1
-      local endIndex = startIndex + batchSize - 1
+    --rec:forget()
+    --local p = torch.Tensor(2)
+    --for x = 1, data:size(1)/batchSize do
+    --  local startIndex = (x-1) * batchSize + 1
+    --  local endIndex = startIndex + batchSize - 1
       --print(startIndex, endIndex, data:size(), labels:size())
-      calcError(data[{{startIndex, endIndex}, {}}], labels[{{startIndex, endIndex}}], p)
+    --  calcError(data[{{startIndex, endIndex}, {}}], labels[{{startIndex, endIndex}}], p)
+    --end
+    --p[1] = (p[1]*100.0) / p[2]
+    --print(string.format("%s Score  %3i%%", intro, p[1]))
+
+    stats = torch.Tensor(5):zero()
+    local getStats = function(state)
+      stats[state] = stats[state] + 1
     end
-    p[1] = (p[1]*100.0) / p[2]
-    print(string.format("%s Score  %3i%%", intro, p[1]), os.time() - startTime)
+
+    labels:apply(getStats)
+    oldStats = stats:clone()
+    stats:zero()
+    local dataResults = convNet:forward(data)
+    local _, maxResults = torch.max(dataResults, 2)
+    print(dataResults[1])
+    maxResults:apply(getStats)
+    print(oldStats, stats)
+    
+
+
   end
 
-  print(player+1, "Active %", players[player+1])
-  if player==0 then
-    printError(trainX[{{1,trainSize/trainNum},{}}], trainY[{{1,trainSize/trainNum}}], "Training")
-    printError(testX, testY, "Testing")
+  if player%100 == 0 then
+    print(player, string.format("Time: %4i%%", os.time() - startTime))
+    if player==0 then
+      printError(trainX[{{1,trainSize/trainNum},{}}], trainY[{{1,trainSize/trainNum}}], "Training")
+      printError(testX, testY, "Testing")
+    end
   end
 
 end
 
-for player = 0, players:size(1)-1 do
+for player = 0, totalPlayers-1 do--players:size(1)-1 do
   local startTimePlayer = os.time()
 
   local trainX = x[{1 + player*dataSize, {}}]
@@ -152,7 +174,7 @@ for player = 0, players:size(1)-1 do
   local parameters, gradParameters = convNet:getParameters()
   if allParams == nil then
     --local pL, gpL = lin:getParameters()
-    allParams = torch.Tensor(players:size(1), 44)--pL:size(1))
+    allParams = torch.Tensor(totalPlayers, parameters:size(1))
     originalParameters = parameters
     --print(pL:size(1))
   else
@@ -176,15 +198,13 @@ for player = 0, players:size(1)-1 do
 
         if endIndex == trainSize then
           counter = 0
-          rec:forget()
+          --rec:forget()
         else
           counter = counter + 1
         end
 
         xBatch = trainX[{{startIndex, endIndex}, {}}]
         yBatch = trainY[{{startIndex, endIndex}}]
-        xBatch = {[1]=xBatch[1], [2]=xBatch[2], [3]=xBatch[3], [4]=xBatch[4], [5]=xBatch[5]}
-        yBatch = {[1]=yBatch[1], [2]=yBatch[2], [3]=yBatch[3], [4]=yBatch[4], [5]=yBatch[5]}
 
         gradParameters:zero()
         --print(yBatch, xBatch, counter)
@@ -193,14 +213,17 @@ for player = 0, players:size(1)-1 do
         end
       end
 
+      --print(xBatch)
+      --print(yBatch)
+
       local outputs = convNet:forward(xBatch)--convNet:forward(xBatch)
-      local loss = sequencerCriterion:forward(outputs, yBatch)
-      local dloss = sequencerCriterion:backward(outputs, yBatch)
+      local loss = criterion:forward(outputs, yBatch)
+      local dloss = criterion:backward(outputs, yBatch)
       convNet:backward(xBatch, dloss)--convNet:backward(xBatch, dloss)
 
       i = i + 1
       -- note that updateInterval < rho
-      if i % updateInterval == -1 then
+      if i % updateInterval == 0 then
         -- backpropagates through time (BPTT) :
         -- 1. backward through feedback and input layers,
         -- 2. updates parameters
@@ -215,21 +238,24 @@ for player = 0, players:size(1)-1 do
 
 
   for i = 1, iterations do
+    rec:forget()
     local _, minibatchLoss = optimMethod(feval, parameters, optimState)
-    print(string.format("Minibatches Processed: %4d, loss = %6f", i,  minibatchLoss[1]))
+    --print(string.format("Minibatches Processed: %4d, loss = %6f", i,  minibatchLoss[1]))
   end
 
   
-  printErrorPerPercentile(player, startTimePlayer, trainX, trainY, testX, testY)
+  printErrorPerPercentile(player, startTime, trainX, trainY, testX, testY)
 
-  p, gp = lin:getParameters()
-  allParams[player+1] = p:clone()
+  --p, gp = lin:getParameters()
+  allParams[player+1] = parameters:clone()
+  --print(allParams)
   
 end
 
 
 print(string.format("Time elapsed: %5is", (os.time() - startTime)))
-torch.save("allParams.t7", allParams)
+--print(allParams)
+torch.save("allParams.t7", {["params"]=allParams, ["players"]=players[{{1, totalPlayers}}]})
 
 
 

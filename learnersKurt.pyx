@@ -21,7 +21,7 @@ class Learner:
 		self.LS = {}
 		for key in activeLearner.keys():
 			#Gaussian variance of 10
-			self.LS[key] = np.clip(activeLearner[key] * learner[0] + reflectiveLearner[key] * learner[1] + 10 * np.random.randn(4), 0, 100)
+			self.LS[key] = np.clip(activeLearner[key] * learner[0] + reflectiveLearner[key] * learner[1], 0, 100) # + 10 * np.random.randn(4), 0, 100)
 			self.LS[key] = self.LS[key]/sum(self.LS[key])
 
 
